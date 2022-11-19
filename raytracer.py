@@ -44,8 +44,8 @@ class Ray:
         :param k: k vector to append, or None to terminate
         :return: None
         """
-        self._position = np.append(self._position, p, axis=0)
-        self._direction = np.append(self._direction, k, axis=0)
+        self._position = np.append(self._position, [p], axis=0)
+        self._direction = np.append(self._direction, [k], axis=0)
 
     def vertices(self) -> np.ndarray:
         """
@@ -61,10 +61,10 @@ class Ray:
 
         :return: True if terminated, False otherwise
         """
-        if all([self.p(), self.k()]):
-            return False
-        else:
+        if None in self.p() or None in self.k():
             return True
+        else:
+            return False
 
 
 class OpticalElement:
@@ -142,14 +142,14 @@ class SphericalRefraction:  # (OpticalElement):
         """
         new_p = self.intercept(ray)
         if new_p is None:  # Warns about the ray not intersecting, continues
-            ray.append(None, None)
+            ray.append(np.array([None, None, None]), np.array([None, None, None]))
             warnings.warn(f"No intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
             return None  # Return statement to exit
 
         normal_vec = np.array([new_p[0], new_p[1], new_p[2] - self._z0])
         new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
         if new_k is None:
-            ray.append(new_p, None)
+            ray.append(new_p, np.array([None, None, None]))
             warnings.warn(f"Total Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
             return None  # Return statement to exit
         
@@ -206,14 +206,15 @@ def normalise(dir_vect: np.ndarray) -> np.ndarray:
 ########################################################################################################################
 # snell_refraction(np.array([1 / np.sqrt(2), 1 / np.sqrt(2), 0]), np.array([1, 0, 0]), 1.0, 1.5)
 
-ray1 = Ray(np.array([10, 0, 5]), np.array([-2, 0, 0]))
+ray1 = Ray([10, 0, 0], [-2, 0, 0])
 
+# ray1.append(np.array([1, 2, 3]), np.array([1, 2, 3]))
 
 sphere = SphericalRefraction(0, 5, 1, 1.5, 0)
 print(sphere.intercept(ray1))
 sphere.propagate_ray(ray1)
 print(ray1.is_terminated())
-print()
+# print()
 # ########################################################################################################################
 #
 # print(sphere.intercept(ray1))
