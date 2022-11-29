@@ -25,10 +25,9 @@ from typing import Union
 
 ########
 
-ref_surface = SphericalRefraction(100, 0.03, 1, 1.5, 0)
-out_pln = OutputPlane(200)
 
-raylist = [Ray(np.array([i / 150, 0, -100]), np.array([0, 0, 1])) for i in range(-15, 16)]
+
+# raylist = [Ray(np.array([i / 150, 0, -100]), np.array([0, 0, 1])) for i in range(-15, 16)]
 
 import matplotlib.pyplot as plt
 
@@ -42,10 +41,9 @@ import matplotlib.pyplot as plt
 #
 # plt.show()
 
-class ColimatedBeam:
-    def __init__(self, z0: float = 0, diam: int = 5, dpmm: int = 1, num_pts: int = 8):
-        self._
-
+# class ColimatedBeam:
+#     def __init__(self, z0: float = 0, diam: int = 5, dpmm: int = 1, num_pts: int = 8):
+#         self._z0 = z0
 
 def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: Union[None, np.ndarray] = None) -> list:
     if k_vec is None:  # Properly dealing with mutable objects passed as kwargs
@@ -73,9 +71,26 @@ def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: Uni
 
 # x_lst, y_lst = collimated_generator()
 list_of_rays = col_generator()
+
 alst = [(ray.p()[0], ray.p()[1]) for ray in list_of_rays]
 
 plt.figure(figsize=(5, 5))
+for point in alst:
+    plt.scatter(point[0], point[1], color='r')
+
+
+ref_surface = SphericalRefraction(100, 0.03, 1, 1.5, 0)
+out_pln = OutputPlane(200)
+
+for ray in list_of_rays:
+    ref_surface.propagate_ray(ray)
+    out_pln.propagate_ray(ray)
+    # plt.plot([i[2] for i in ray.vertices()], [i[0] for i in ray.vertices()], color='k')
+
+
+alst = [(ray.p()[0], ray.p()[1]) for ray in list_of_rays]
+
+
 for point in alst:
     plt.scatter(point[0], point[1], color='b')
 plt.show()
