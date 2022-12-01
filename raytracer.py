@@ -102,7 +102,7 @@ class OpticalElement:
     def __init__(self):
         self._n1 = self._n2 = 1
 
-    def normal(self):
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
         raise NotImplementedError("Must implement normal method")
 
     def _intercept(self, ray: Ray) -> None | np.ndarray:
@@ -125,10 +125,11 @@ class OpticalElement:
             length = (- np.dot(r, z_hat)) / np.dot(k_hat, z_hat)
             return p + length * k_hat
 
-        r += np.array([0, 0, self._radius])  # This is vector r as marked in the diagram before Task 4
+        radius = 1 / self._curvature
+        r = r + np.array([0, 0, radius])  # This is vector r as marked in the diagram before Task 4
         r_dot_k = np.dot(r, k_hat)
 
-        var_discriminant = np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
+        var_discriminant = np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - radius ** 2)
 
         if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
             return None
@@ -149,19 +150,17 @@ class OpticalElement:
 
         new_p = self._intercept(ray)
         if new_p is None:  # Warns about the ray not intersecting, continues
-            ray.append(None, None)
             warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
+            return None, None  # Return statement to exit
 
-        normal_vec = self.normal()
+        normal_vec = self.normal(new_p)
         new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
         if new_k is None:
-            ray.append(new_p, None)
             warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
+            return new_p, None  # Return statement to exit
+
         return new_p, new_k
         # ray.append(new_p, new_k)
-
 
 
 class SphericalRefraction(OpticalElement):
@@ -181,7 +180,7 @@ class SphericalRefraction(OpticalElement):
         super().__init__()
         self._z0 = z0
         self._curvature = curv
-        self._radius = 1 / curv
+        # self._radius = 1 / curv
         self._n1 = n1
         self._n2 = n2
         self.aperture_radius = a_radius  # TODO: impliment this
@@ -195,8 +194,7 @@ class SphericalRefraction(OpticalElement):
     # def _intercept(self, ray: Ray) -> None | np.ndarray:
 
     def normal(self, p_vector: np.ndarray) -> np.ndarray:
-
-        return normalise(p_vector - (np.array([0, 0, self._z0 + self._radius])))
+        return normalise(p_vector - (np.array([0, 0, self._z0 + 1 / self._curvature if self._curvature != 0 else 0])))
 
     def propagate_ray(self, ray: Ray) -> None:
         """
@@ -211,7 +209,8 @@ class SphericalRefraction(OpticalElement):
         :param Ray ray: Ray object to propagate
         :return: None
         """
-        ray.append(super().propagate_ray())
+        pos, direct = super().propagate_ray(ray)
+        ray.append(pos, direct)
         # new_p = self._intercept(ray)
         # if new_p is None:  # Warns about the ray not intersecting, continues
         #     ray.append(None, None)
@@ -249,12 +248,12 @@ class OutputPlane(OpticalElement):
     #     length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
     #     return init_p + length * k_hat
 
-    def normal(self):
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
         return np.array([0, 0, -1])
 
     def propagate_ray(self, ray: Ray) -> None:
-
-        ray.append(super().propagate_ray()[0], None)  # Marks ray as terminated
+        pos, _ = super().propagate_ray(ray)
+        ray.append(pos, None)  # Marks ray as terminated
 
 
 def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: float):
@@ -300,3 +299,28 @@ def normalise(dir_vect: np.ndarray) -> np.ndarray:
     :return: Normalised direction vector
     """
     return dir_vect / vector_magnitude(dir_vect)
+
+
+def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: None | np.ndarray = None) -> list:
+    # TODO: Documentation
+    if k_vec is None:  # Properly dealing with mutable objects passed as kwargs
+        k = np.array([0, 0, 1])
+    else:
+        k = k_vec
+    ray_lst = [Ray(np.array([0, 0, z0]), k)]
+
+    pts_incr = 6  # 6 is the best approximation to "uniformly distributed". This is impossible in reality
+    num_of_shells = int(rad / dist_pts)
+    for i in range(num_of_shells):
+        num_pts = i * pts_incr  # The number of rays in the "shell"
+        radius = i * dist_pts
+        ray_lst += (Ray(pos=np.array([radius * np.cos(2 * np.pi * dot / num_pts),
+                                      radius * np.sin(2 * np.pi * dot / num_pts),
+                                      z0]),
+                        direc=np.array([0, 0, 1]))
+                    for dot in range(num_pts))
+        # x_vals += (radius * np.cos(2 * np.pi * dot / num_pts) for dot in range(num_pts))
+        # y_vals += (radius * np.sin(2 * np.pi * dot / num_pts) for dot in range(num_pts))
+
+    # return x_vals, y_vals
+    return ray_lst
