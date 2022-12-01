@@ -100,52 +100,68 @@ class Ray:
 
 class OpticalElement:
     def __init__(self):
-        pass
+        self._n1 = self._n2 = 1
 
-    # def intercept(self, ray: Ray, z0: float):
-    #     """
-    #     Works out the nearest point of interception between the ray's origin and the Optical Element's surface. Returns
-    #     array if this exists, None otherwise.
-    #
-    #     :param Ray ray: Ray object to calculate the intersection of
-    #     :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
-    #     """
-    #
-    #     def discriminant() -> float:
-    #         """
-    #         :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
-    #         p and the point of intersection
-    #         """
-    #         return np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
-    #
-    #     p = ray.p()
-    #     k = ray.k()
-    #     k_hat = normalise(k)
-    #     # r = r_vec
-    #     r = np.array([0, 0, z0]) - p
-    #     r_dot_k = np.dot(r, k_hat)
-    #
-    #     var_discriminant = discriminant()
-    #
-    #     return p, r_dot_k, k_hat, var_discriminant
-    #
-    #     # if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
-    #     #     return None
-    #     #
-    #     # elif abs(var_discriminant) < 1e-7:
-    #     #     # If there is only one intersection point i.e. quadratic nature is 0,Takes care of floating point operation
-    #     #     # error
-    #     #
-    #     #     return p + r_dot_k * k_hat  # in this case length = r_dot_k
-    #     #
-    #     # else:  # There are 2 intersection points, discriminant is positive, so we can safely sqrt. We select the
-    #     #     # smallest of the absolute value of the 2 lengths
-    #     #     length_lst = [abs(- r_dot_k + np.sqrt(var_discriminant)), abs(- r_dot_k - np.sqrt(var_discriminant))]
-    #     #     length = min(length_lst)
-    #     #     return p + length * k_hat
+    def normal(self):
+        raise NotImplementedError("Must implement normal method")
 
-    def propagate_ray(self, ray):
+    def _intercept(self, ray: Ray) -> None | np.ndarray:
+        """
+        Works out the nearest point of interception between the ray's origin and the Optical Element's surface. Returns
+        array if this exists, None otherwise. Takes care of case where curvature = 0.
+
+        :param Ray ray: Ray object to calculate the intersection of
+        :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
+        """
+        if ray.is_terminated():
+            return None
+
+        p = ray.p()
+        k = ray.k()
+        k_hat = normalise(k)
+        r = p - np.array([0, 0, self._z0])
+
+        if self._curvature == 0:
+            length = (- np.dot(r, z_hat)) / np.dot(k_hat, z_hat)
+            return p + length * k_hat
+
+        r += np.array([0, 0, self._radius])  # This is vector r as marked in the diagram before Task 4
+        r_dot_k = np.dot(r, k_hat)
+
+        var_discriminant = np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
+
+        if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
+            return None
+
+        elif abs(var_discriminant) < 1e-7:
+            # If there is only one intersection point i.e. quadratic nature is 0, Takes care of floating point operation
+            # error
+            return p + r_dot_k * k_hat  # in this case length = r_dot_k
+
+        else:  # There are 2 intersection points, discriminant is positive, so we can safely sqrt. We select the
+            # smallest of the absolute value of the 2 lengths
+            length_lst = [abs(- r_dot_k + np.sqrt(var_discriminant)), abs(- r_dot_k - np.sqrt(var_discriminant))]
+            length = min(length_lst)
+            return p + length * k_hat
+
+    def propagate_ray(self, ray: Ray) -> None | tuple:
         """propagate a ray through the optical element"""
+
+        new_p = self._intercept(ray)
+        if new_p is None:  # Warns about the ray not intersecting, continues
+            ray.append(None, None)
+            warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
+            return None  # Return statement to exit
+
+        normal_vec = self.normal()
+        new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
+        if new_k is None:
+            ray.append(new_p, None)
+            warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
+            return None  # Return statement to exit
+        return new_p, new_k
+        # ray.append(new_p, new_k)
+
 
 
 class SphericalRefraction(OpticalElement):
@@ -162,6 +178,7 @@ class SphericalRefraction(OpticalElement):
         :return: None
         """
         # OpticalElement.__init__(self)
+        super().__init__()
         self._z0 = z0
         self._curvature = curv
         self._radius = 1 / curv
@@ -175,51 +192,11 @@ class SphericalRefraction(OpticalElement):
     def __str__(self):
         pass
 
-    def _intercept(self, ray: Ray) -> None | np.ndarray:
-        """
-        Works out the nearest point of interception between the ray's origin and the Optical Element's surface. Returns
-        array if this exists, None otherwise. Takes care of case where curvature = 0.
+    # def _intercept(self, ray: Ray) -> None | np.ndarray:
 
-        :param Ray ray: Ray object to calculate the intersection of
-        :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
-        """
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
 
-        # def discriminant() -> float:
-        #     """
-        #     :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
-        #     p and the point of intersection
-        #     """
-        #     return
-
-        discriminant = lambda : np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
-
-        p = ray.p()
-        k = ray.k()
-        k_hat = normalise(k)
-
-        if self._curvature == 0:
-            # z_hat = np.array([0, 0, 1])
-            _r = p - np.array([0, 0, self._z0])  # Not to confuse this with the variable r outside this if statement
-            length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
-            return p + length * k_hat
-
-        r = p - np.array([0, 0, self._z0 + self._radius])  # This is vector r as marked in the diagram before Task 4
-        r_dot_k = np.dot(r, k_hat)
-        var_discriminant = discriminant()
-
-        if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
-            return None
-
-        elif abs(var_discriminant) < 1e-7:
-            # If there is only one intersection point i.e. quadratic nature is 0,Takes care of floating point operation
-            # error
-            return p + r_dot_k * k_hat  # in this case length = r_dot_k
-
-        else:  # There are 2 intersection points, discriminant is positive, so we can safely sqrt. We select the
-            # smallest of the absolute value of the 2 lengths
-            length_lst = [abs(- r_dot_k + np.sqrt(var_discriminant)), abs(- r_dot_k - np.sqrt(var_discriminant))]
-            length = min(length_lst)
-            return p + length * k_hat
+        return normalise(p_vector - (np.array([0, 0, self._z0 + self._radius])))
 
     def propagate_ray(self, ray: Ray) -> None:
         """
@@ -234,21 +211,21 @@ class SphericalRefraction(OpticalElement):
         :param Ray ray: Ray object to propagate
         :return: None
         """
+        ray.append(super().propagate_ray())
+        # new_p = self._intercept(ray)
+        # if new_p is None:  # Warns about the ray not intersecting, continues
+        #     ray.append(None, None)
+        #     warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
+        #     return None  # Return statement to exit
 
-        new_p = self._intercept(ray)
-        if new_p is None:  # Warns about the ray not intersecting, continues
-            ray.append(None, None)
-            warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
-
-        normal_vec = normalise(new_p - (np.array([0, 0, self._z0 + self._radius])))
-        new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
-        if new_k is None:
-            ray.append(new_p, None)
-            warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
-        
-        ray.append(new_p, new_k)
+        # normal_vec = normalise(new_p - (np.array([0, 0, self._z0 + self._radius])))
+        # new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
+        # if new_k is None:
+        #     ray.append(new_p, None)
+        #     warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
+        #     return None  # Return statement to exit
+        #
+        # ray.append(new_p, new_k)
 
 
 class OutputPlane(OpticalElement):
@@ -256,26 +233,28 @@ class OutputPlane(OpticalElement):
     def __init__(self, z0: float) -> None:
         super().__init__()
         self._z0 = z0
+        self._curvature = 0
 
-    def intercept(self, ray: Ray) -> None | np.ndarray:
+    # def intercept(self, ray: Ray) -> None | np.ndarray:
+    #
+    #     if ray.is_terminated():
+    #         return None
+    #
+    #     init_p = ray.p()
+    #     init_k = ray.k()
+    #     k_hat = normalise(init_k)
+    #
+    #     # z_hat = np.array([0, 0, 1])
+    #     _r = init_p - np.array([0, 0, self._z0])
+    #     length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
+    #     return init_p + length * k_hat
 
-        if ray.is_terminated():
-            return None
-
-        init_p = ray.p()
-        init_k = ray.k()
-        k_hat = normalise(init_k)
-
-        # z_hat = np.array([0, 0, 1])
-        _r = init_p - np.array([0, 0, self._z0])
-        length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
-        return init_p + length * k_hat
+    def normal(self):
+        return np.array([0, 0, -1])
 
     def propagate_ray(self, ray: Ray) -> None:
-        if ray.is_terminated():
-            return None
 
-        ray.append(self.intercept(ray), None)  # Marks ray as terminated
+        ray.append(super().propagate_ray()[0], None)  # Marks ray as terminated
 
 
 def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: float):
@@ -298,7 +277,6 @@ def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: flo
     if np.sin(theta1) > (n_2 / n_1):  # Checks for TIR
         return None
 
-    # theta2 = np.arcsin(n_1 * np.sin(theta1) / n_2)
     theta2 = np.arcsin(n_1 / n_2 * vector_magnitude(np.cross(inc_v_nor, surf_n_nor)))
     ref_v = (n_1 / n_2) * inc_v_nor + ((n_1 / n_2) * np.cos(theta1) - np.cos(theta2)) * surf_n_nor
     return normalise(ref_v)
