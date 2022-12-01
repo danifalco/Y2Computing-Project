@@ -13,29 +13,48 @@ Functions:
 
 import numpy as np
 import warnings
-from typing import Union
 
+z_hat = np.array([0, 0, 1])
 
 class Ray:
+    """
+    Ray class to represent a ray of light
+    """
     def __init__(self, pos: np.ndarray, direc: np.ndarray) -> None:
+        """
+        Ray class constructor
+
+        :param pos: vector space position in 3D: (x, y, z)
+        :param direc: direction vector in 3D: (x, y, z)
+        :return: None
+        """
         self._position = np.array([pos])
         self._direction = np.array([direc])
 
+    def __repr__(self):
+        return f"Ray(pos=np.array([{self.p()[0]}, {self.p()[1]}, {self.p()[2]}]), direc=np.array([{self.k()[0]}, " \
+               f"{self.k()[1]}, {self.k()[2]}]))"
+
+    def __str__(self):
+        return f"Ray object. Currently in position {self.p()} and with direction {self.k()}"
+
     def p(self) -> np.ndarray:
         """
-        Access method for current position vector
+        Access method for current position vector of the ray
+
         :return: np.ndarray, Ray position
         """
         return self._position[-1]
 
     def k(self) -> np.ndarray:
         """
-        Access method for current direction vector
+        Access method for current direction vector of the ray
+
         :return: np.ndarray, Ray direction
         """
         return self._direction[-1]
 
-    def append(self, p: Union[np.ndarray, None], k: Union[np.ndarray, None]) -> None:
+    def append(self, p: np.ndarray | None, k: np.ndarray | None) -> None:
         """
         For a given p and k, appends these to hidden attributes _position and _direction. Either of these may be None
         type to terminate the ray
@@ -56,6 +75,7 @@ class Ray:
     def vertices(self) -> np.ndarray:
         """
         Access method to the whole position vector, returning all points
+
         :return: np.ndarray, All points along the way
         """
         return self._position
@@ -63,7 +83,12 @@ class Ray:
     def is_terminated(self) -> bool:
         """
         Method to determine whether ray is terminated.
-        A ray is terminated if any of p or k is None. It may be that p is not None but k is, meaning TIR has occurred
+
+        A ray is terminated if any of p or k is None.
+
+        If both p and K have None values in them, the ray is fully terminated after having attempted to intersect
+        but point of intersection was not found. If p is defined (not None) but k is None, TIR has occurred so only the
+        point of contact with the refracting object is given.
 
         :return: True if terminated, False otherwise
         """
@@ -120,7 +145,7 @@ class OpticalElement:
     #     #     return p + length * k_hat
 
     def propagate_ray(self, ray):
-        "propagate a ray through the optical element"
+        """propagate a ray through the optical element"""
 
 
 class SphericalRefraction(OpticalElement):
@@ -142,9 +167,15 @@ class SphericalRefraction(OpticalElement):
         self._radius = 1 / curv
         self._n1 = n1
         self._n2 = n2
-        self.aperture_radius = a_radius
+        self.aperture_radius = a_radius  # TODO: impliment this
 
-    def intercept(self, ray: Ray):
+    def __repr__(self):
+        pass
+
+    def __str__(self):
+        pass
+
+    def _intercept(self, ray: Ray) -> None | np.ndarray:
         """
         Works out the nearest point of interception between the ray's origin and the Optical Element's surface. Returns
         array if this exists, None otherwise. Takes care of case where curvature = 0.
@@ -153,19 +184,21 @@ class SphericalRefraction(OpticalElement):
         :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
         """
 
-        def discriminant() -> float:
-            """
-            :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
-            p and the point of intersection
-            """
-            return np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
+        # def discriminant() -> float:
+        #     """
+        #     :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
+        #     p and the point of intersection
+        #     """
+        #     return
+
+        discriminant = lambda : np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
 
         p = ray.p()
         k = ray.k()
         k_hat = normalise(k)
 
-        if not self._curvature:  # in case of 0 curvature
-            z_hat = np.array([0, 0, 1])
+        if self._curvature == 0:
+            # z_hat = np.array([0, 0, 1])
             _r = p - np.array([0, 0, self._z0])  # Not to confuse this with the variable r outside this if statement
             length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
             return p + length * k_hat
@@ -190,15 +223,19 @@ class SphericalRefraction(OpticalElement):
 
     def propagate_ray(self, ray: Ray) -> None:
         """
-        # TODO: Make sure to properly document the None returns
-        # TODO: Make sure to deal with the ray termination stuff
+        Propagates ray after having intersected with the spherical refractive object in question (this object).
 
+        To do this, it calculates the intersection point (if it exists), appends said point and the direction of the ray
+        using the global snell_refraction function.
+
+        Terminates the ray if there is no intersection or total internal reflection occurs. See Ray.is_terminated docs
+        for further info on ray termination.
 
         :param Ray ray: Ray object to propagate
         :return: None
         """
 
-        new_p = self.intercept(ray)
+        new_p = self._intercept(ray)
         if new_p is None:  # Warns about the ray not intersecting, continues
             ray.append(None, None)
             warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
@@ -215,11 +252,12 @@ class SphericalRefraction(OpticalElement):
 
 
 class OutputPlane(OpticalElement):
+
     def __init__(self, z0: float) -> None:
         super().__init__()
         self._z0 = z0
 
-    def intercept(self, ray: Ray) -> Union[None, np.ndarray]:
+    def intercept(self, ray: Ray) -> None | np.ndarray:
 
         if ray.is_terminated():
             return None
@@ -228,7 +266,7 @@ class OutputPlane(OpticalElement):
         init_k = ray.k()
         k_hat = normalise(init_k)
 
-        z_hat = np.array([0, 0, 1])
+        # z_hat = np.array([0, 0, 1])
         _r = init_p - np.array([0, 0, self._z0])
         length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
         return init_p + length * k_hat
@@ -252,7 +290,7 @@ def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: flo
     :param n_2: Refractive index of refracting material
     :return: Direction vector of refracted ray, None if TIR occurs
     """
-    if not all([n_1, n_2]):
+    if 0 in (n_1, n_2):
         raise ValueError("Refractive indexes cannot be zero")
     surf_n_nor = normalise(surf_n)
     inc_v_nor = normalise(inc_v)
@@ -283,6 +321,4 @@ def normalise(dir_vect: np.ndarray) -> np.ndarray:
     :param np.ndarray dir_vect: Input direction vector to normalise
     :return: Normalised direction vector
     """
-    return np.array([dir_vect[0] / vector_magnitude(dir_vect),
-                     dir_vect[1] / vector_magnitude(dir_vect),
-                     dir_vect[2] / vector_magnitude(dir_vect)])
+    return dir_vect / vector_magnitude(dir_vect)
