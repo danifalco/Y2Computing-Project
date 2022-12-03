@@ -198,13 +198,14 @@ class SphericalRefraction(OpticalElement):
 
     def propagate_ray(self, ray: Ray) -> None:
         """
-        Propagates ray after having intersected with the spherical refractive object in question (this object).
+        Inherits parent class' propagate_ray method propagating the ray after having intersected with the spherical
+        refractive object in question (this object).
 
-        To do this, it calculates the intersection point (if it exists), appends said point and the direction of the ray
-        using the global snell_refraction function.
+        Calculates the intersection point (if exists), appends this point to the ray, and using global snell_refraction
+        function works out the direction of the ray and appends this too.
 
-        Terminates the ray if there is no intersection or total internal reflection occurs. See Ray.is_terminated docs
-        for further info on ray termination.
+        Terminates ray if there is no intersection point or if TIR occurs. See Ray.is_terminated() docs for further info
+        on ray termination.
 
         :param Ray ray: Ray object to propagate
         :return: None
@@ -311,16 +312,13 @@ def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: Non
 
     pts_incr = 6  # 6 is the best approximation to "uniformly distributed". This is impossible in reality
     num_of_shells = int(rad / dist_pts)
-    for i in range(num_of_shells):
+    for i in range(1, num_of_shells):
         num_pts = i * pts_incr  # The number of rays in the "shell"
         radius = i * dist_pts
         ray_lst += (Ray(pos=np.array([radius * np.cos(2 * np.pi * dot / num_pts),
                                       radius * np.sin(2 * np.pi * dot / num_pts),
                                       z0]),
-                        direc=np.array([0, 0, 1]))
+                        direc=k_vec)
                     for dot in range(num_pts))
-        # x_vals += (radius * np.cos(2 * np.pi * dot / num_pts) for dot in range(num_pts))
-        # y_vals += (radius * np.sin(2 * np.pi * dot / num_pts) for dot in range(num_pts))
 
-    # return x_vals, y_vals
     return ray_lst
