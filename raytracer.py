@@ -12,7 +12,9 @@ Functions:
 '''
 
 import numpy as np
+import scipy.optimize
 import matplotlib.pyplot as plt
+import copy
 import warnings
 
 z_hat = np.array([0, 0, 1])
@@ -132,7 +134,7 @@ class OpticalElement:
 
         if self._curvature == 0:
             length = (- np.dot(r, z_hat)) / np.dot(k_hat, z_hat)
-            return apt_check(p + length * k_hat)  # Check that intersection is within aperture
+            return apt_check(p + length * k_hat)  # Checks that intersection is within aperture
 
         radius = 1 / self._curvature
         centre_lens = self._z0 + radius
@@ -149,8 +151,8 @@ class OpticalElement:
 
         elif abs(var_discriminant) > 1e-7:  # There are 2 intersection points, discriminant is positive, so we can
             # safely sqrt. We select the smallest of the absolute value of the 2 lengths
+
             length_lst = [- r_dot_k + np.sqrt(var_discriminant), - r_dot_k - np.sqrt(var_discriminant)]
-            # length = max(length_lst) if self._curvature > 0 else min(length_lst)
 
             if self._curvature > 0:
                 length = min(length_lst)
@@ -159,11 +161,6 @@ class OpticalElement:
                     length = length_lst[0]
                 else:
                     length = max(length_lst)
-            # length = min(length_lst) if self._curvature > 0 else max(length_lst)  # TODO: this is still not right
-            # else:
-            #     length = min(length_lst) if self._curvature > 0 else max(length_lst)
-
-
             return apt_check(p + length * k_hat)
 
         #  Otherwise there is no intersection, so returns None
@@ -183,7 +180,6 @@ class OpticalElement:
             return new_p, None  # Return statement to exit
 
         return new_p, new_k
-        # ray.append(new_p, new_k)
 
 
 class SphericalRefraction(OpticalElement):
@@ -213,8 +209,7 @@ class SphericalRefraction(OpticalElement):
 
     def __str__(self):
         pass
-
-    # def _intercept(self, ray: Ray) -> None | np.ndarray:
+        pass
 
     def normal(self, p_vector: np.ndarray) -> np.ndarray:
         if self._curvature == 0:
@@ -240,20 +235,7 @@ class SphericalRefraction(OpticalElement):
             return None
         pos, direct = super().propagate_ray(ray)
         ray.append(pos, direct)
-        # new_p = self._intercept(ray)
-        # if new_p is None:  # Warns about the ray not intersecting, continues
-        #     ray.append(None, None)
-        #     warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-        #     return None  # Return statement to exit
 
-        # normal_vec = normalise(new_p - (np.array([0, 0, self._z0 + self._radius])))
-        # new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
-        # if new_k is None:
-        #     ray.append(new_p, None)
-        #     warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-        #     return None  # Return statement to exit
-        #
-        # ray.append(new_p, new_k)
 
 
 class OutputPlane(OpticalElement):
@@ -455,9 +437,19 @@ def rms(ray_lst: list):
     return np.sqrt(np.mean(squares_list))
 
 
-# def surface_thickness(curvature: float, aperture: float) -> float:
-#     return (1 / abs(curvature)) - (1 / abs(curvature)) * np.sin(np.arccos(aperture * abs(curvature)))
+def rms_plotter(ray_lst: list, arange: np.ndarray):
+    lst_of_rays = copy.deepcopy(ray_lst)
+    z_vals = []
+    rms_vals = []
+    for z_val in arange:
+        ray_set = copy.deepcopy(lst_of_rays)
+        out_pln = OutputPlane(z_val, 50)
+        for ray in ray_set:
+            out_pln.propagate_ray(ray)
+        rms_vals.append(rms(ray_set))
+        z_vals.append(z_val)
+
+    return z_vals, rms_vals
 
 
-# def rms_optimize(ray_lst: list):
-
+def lens_optimiser
