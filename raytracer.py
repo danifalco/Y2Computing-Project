@@ -12,7 +12,7 @@ Functions:
 '''
 
 import numpy as np
-import scipy.optimize
+from scipy.optimize import fmin_tnc
 import matplotlib.pyplot as plt
 import copy
 import warnings
@@ -118,9 +118,6 @@ class OpticalElement:
         :param Ray ray: Ray object to calculate the intersection of
         :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
         """
-        # if ray.is_terminated():
-        #     return None
-
         def apt_check(intersection_pt):
             if vector_magnitude(intersection_pt - np.array([0, 0, intersection_pt[2]])) <= self._aperture:
                 return intersection_pt
@@ -165,8 +162,16 @@ class OpticalElement:
 
         #  Otherwise there is no intersection, so returns None
 
-    def propagate_ray(self, ray: Ray) -> None | tuple:
-        """propagate a ray through the optical element"""
+    def propagate_ray(self, ray: Ray) -> tuple:
+        """
+        Generalised propagate ray function to be properly implmented in sub-classes
+
+        Raises an error if no intersection is found, or total internal reflection occurs, especially useful when
+        debugging. This error does not break any functionality.
+
+        :param Ray ray: ray to propagate
+        :return: Tuple containing p and k vectors to append
+        """
 
         new_p = self._intercept(ray)
         if new_p is None:  # Warns about the ray not intersecting, continues
@@ -184,7 +189,7 @@ class OpticalElement:
 
 class SphericalRefraction(OpticalElement):
 
-    def __init__(self, z0: float, curv: float, n1: float, n2: float, aperture: float) -> None:
+    def __init__(self, z0: float, curv: float, n1: float, n2: float, aperture: float):
         """
         Constructor for SphericalRefraction Class
 
@@ -195,23 +200,20 @@ class SphericalRefraction(OpticalElement):
         :param float aperture: The maximum extent of the surface from the optical axis
         :return: None
         """
-        # OpticalElement.__init__(self)
         super().__init__()
         self._z0 = z0
         self._curvature = curv
-        # self._radius = 1 / curv
         self._n1 = n1
         self._n2 = n2
-        self._aperture = aperture  # TODO: impliment this
-
-    def __repr__(self):
-        pass
-
-    def __str__(self):
-        pass
-        pass
+        self._aperture = aperture
 
     def normal(self, p_vector: np.ndarray) -> np.ndarray:
+        """
+        Works out the normal of the surface at a given point (p_vector)
+
+        :param np.ndarray p_vector: The point to work out the normal to the surface at
+        :return: np.ndarray representing the normal
+        """
         if self._curvature == 0:
             return np.array([0, 0, 1])
         return normalise(p_vector - (np.array([0, 0, self._z0 + 1 / self._curvature])))
@@ -237,7 +239,6 @@ class SphericalRefraction(OpticalElement):
         ray.append(pos, direct)
 
 
-
 class OutputPlane(OpticalElement):
 
     def __init__(self, z0: float, aperture: float) -> None:
@@ -246,24 +247,28 @@ class OutputPlane(OpticalElement):
         self._aperture = aperture
         self._curvature = 0
 
-    # def intercept(self, ray: Ray) -> None | np.ndarray:
-    #
-    #     if ray.is_terminated():
-    #         return None
-    #
-    #     init_p = ray.p()
-    #     init_k = ray.k()
-    #     k_hat = normalise(init_k)
-    #
-    #     # z_hat = np.array([0, 0, 1])
-    #     _r = init_p - np.array([0, 0, self._z0])
-    #     length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
-    #     return init_p + length * k_hat
-
     def normal(self, p_vector: np.ndarray) -> np.ndarray:
+        """
+        Works out the normal of the surface at a given point (p_vector)
+
+        :param np.ndarray p_vector: The point to work out the normal to the surface at
+        :return: np.ndarray representing the normal
+        """
         return np.array([0, 0, -1])
 
     def propagate_ray(self, ray: Ray) -> None:
+        """
+        Inherits parent class' propagate_ray method propagating the ray after having intersected with the output plane
+        in question (this object).
+
+        Calculates the intersection point (if exists), appends this point to the ray, and terminates the ray by
+        appending None to the ray's direction vector. See Ray.is_terminated() docs for further info on ray termination.
+
+        Its calling will have no effect if the ray is already terminated.
+
+        :param Ray ray: Ray object to propagate
+        :return: None
+        """
         if ray.is_terminated():
             warnings.warn(f"\nRay {ray} is terminated, cannot propagate")
             return None
@@ -272,9 +277,22 @@ class OutputPlane(OpticalElement):
 
 
 class Lens:
-    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens, aperture: float,n_out: float):
+    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens, aperture: float, n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If both sides of the lens have 0 curvature
+        """
         if curv_in == curv_out == 0:
-            raise ValueError("Both sides of the lens cannot be 0")
+            raise ValueError("Both sides of the lens cannot be of 0 curvature")
 
         self._z0_in = z0
         self._curv_in = curv_in
@@ -291,52 +309,99 @@ class Lens:
         self.surface_out = SphericalRefraction(self._z0_out, self._curv_out, self._n_air, self._n_lens, self._aperture)
 
     def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane
+
+        :return: None
+        :raise NotImplementedError: if not implemented by sub-class
+        """
         raise NotImplementedError
 
     def surface_thickness(self, curvature: float) -> float:
+        """
+        Useful tool to work out the thickness of a refractive surface given its curvature and the lens' aperture
+        (radius)
+
+        :param float curvature: Curvature of the refractive surface to work out the thickness of
+        :return: float - Thickness of refractive surface
+        """
         return (1 / abs(curvature)) - \
                (1 / abs(curvature)) * np.sin(np.arccos(self._aperture * abs(curvature)))
 
     def _propagate(self, ray: Ray) -> None:
+        """
+        Propagates ray through the lens in question
+
+        :param Ray ray: Ray to propagate
+        :return: None
+        """
         self.surface_in.propagate_ray(ray)
-        # self._middle.propagate_ray(ray)
         self.surface_out.propagate_ray(ray)
 
-    def plot_xz(self, ray_lst: list, outpt_pln: OutputPlane = None):
+    def plot_xz(self, ray_lst: list, outpt_pln: OutputPlane | None = None) -> None:
+        """
+        Plots graph in the xz plane (ray traces).
+
+        Must use plt.show() statement after the use of this method, this is useful to further customise the plot (adding
+        title etc.)
+
+        :param list ray_lst: List containing ray objects to plot
+        :param outpt_pln: Optional, Output plane if desired
+        :return: None
+        """
         for ray in ray_lst:
             self._propagate(ray)
             if outpt_pln is not None:
                 outpt_pln.propagate_ray(ray)
             points = ray.vertices()
             plt.plot([i[2] for i in points],
-                     [i[0] for i in points], '-x', color='k')
+                     [i[0] for i in points], '-x', color='k') if None not in points else None
 
-    def plot_xy(self, ray_lst: list, outpt_pln: OutputPlane):
+    def plot_xy(self, ray_lst: list, outpt_pln: OutputPlane) -> None:
+        """
+        Plots scatter graph in the z plane (dots)
+
+        Must use plt.show() statement after the use of this method, this is useful to further customise the plot (adding
+        title etc.)
+
+        :param ray_lst: List containing ray objects to plot
+        :param outpt_pln: Output plane to plot the graph on. Unlike in plot_xz, this is mandatory here
+        :return: None
+        """
+        plt.figure(figsize=(6, 6))
         for ray in ray_lst:
             self._propagate(ray)
             outpt_pln.propagate_ray(ray)
-            points = ray.vertices()
-
-            plt.figure(figsize=(6, 6))
-            plt.scatter([i[0] for i in points],
-                        [i[1] for i in points], color='k')
+            points = ray.p()
+            plt.scatter(points[0], points[1], color='k')
 
 
 class PlanoConvex(Lens):
-    # TODO: Document Class
     def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens:float, aperture: float,n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If input parameters for curvature do not make a plano-convex lens
+        """
         if curv_in == 0 > curv_out or curv_in > 0 == curv_out:
             Lens.__init__(self, z0, curv_in, curv_out, n_lens, aperture, n_out)
         else:
             raise ValueError("The input parameters for curvature do not make a Plano-Convex Lens")
 
-    def __repr__(self):
-        pass  # TODO: Implement
-
-    def __str__(self):
-        pass  # TODO: Implement
-
     def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane for a plano-convex configuration.
+
+        :return: None
+        """
         if self._curv_in == 0:
             self._z0_out = self._z0_in + self.surface_thickness(self._curv_out)
 
@@ -345,19 +410,31 @@ class PlanoConvex(Lens):
 
 
 class BiConvex(Lens):
-    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens: float, aperture: float,n_out: float):
+    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens: float, aperture: float, n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If input parameters for curvature do not make a biconvex lens
+        """
         if curv_in > 0 > curv_out:
             Lens.__init__(self, z0, curv_in, curv_out, n_lens, aperture, n_out)
         else:
             raise ValueError("The input parameters for curvature do not make a Biconvex Lens")
 
-    def __repr__(self):
-        pass  # TODO: Implement
-
-    def __str__(self):
-        pass  # TODO: Implement
-
     def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane for a biconvex configuration.
+
+        :return: None
+        """
         self._z0_out = self._z0_in + 2 * self.surface_thickness(self._curv_in)
 
 
@@ -406,8 +483,22 @@ def normalise(dir_vect: np.ndarray) -> np.ndarray:
     return dir_vect / vector_magnitude(dir_vect)
 
 
-def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: None | np.ndarray = None) -> list:
-    # TODO: Documentation
+def col_generator(z0: float = 0, rad: float = 5, dist_pts: float = 0.5, k_vec: None | np.ndarray = None) -> list:
+    """
+    Generates a collimated bundle of equally spaced rays travelling in the z-direction by default using polar
+    coordinates.
+
+    Although it is theoretically impossible to make an equally spaced bundle of rays, by increasing the number of rays
+    by 6 ever new ring we can get the closest approximation
+
+    Calling the function without parsing any parameters will output a default ray bundle of radius 5
+
+    :param float z0: the z point to start the bundle of rays at
+    :param float rad: the radius of the ray bundle
+    :param float dist_pts: distance between points
+    :param None | np.ndarray k_vec: direction vector of the rays (defaults to z_hat)
+    :return: list - containing all individual ray objects
+    """
     if k_vec is None:  # Properly dealing with mutable objects passed as kwargs
         k = np.array([0, 0, 1])
     else:
@@ -428,7 +519,13 @@ def col_generator(z0: float = 0, rad: int = 5, dist_pts: float = 0.5, k_vec: Non
     return ray_lst
 
 
-def rms(ray_lst: list):
+def rms(ray_lst: list[Ray]) -> float:
+    """
+    Works out the RMS radius of a list of ray objects
+
+    :param list[Ray] ray_lst: List of rays to calculate the RMS radius of
+    :return: float - RMS radius of given rays
+    """
     squares_list = []
     for ray in ray_lst:
         if None not in ray.p():
@@ -437,7 +534,17 @@ def rms(ray_lst: list):
     return np.sqrt(np.mean(squares_list))
 
 
-def rms_plotter(ray_lst: list, arange: np.ndarray):
+def rms_plotter(ray_lst: list[Ray], arange: np.ndarray) -> tuple:
+    """
+    Helper function to easily debug and further expand program. Plots rms values of rays over a range of previously
+    given values.
+
+    Helps find the point of minimum RMS (focal point)
+
+    :param ray_lst: List of rays to calculate the RMS radius of
+    :param np.ndarray arange: range of z-values to iterate over
+    :return: Tuple containing z-values and their corresponding RMS values
+    """
     lst_of_rays = copy.deepcopy(ray_lst)
     z_vals = []
     rms_vals = []
@@ -450,6 +557,3 @@ def rms_plotter(ray_lst: list, arange: np.ndarray):
         z_vals.append(z_val)
 
     return z_vals, rms_vals
-
-
-def lens_optimiser
