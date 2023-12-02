@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository, `Y2Computing-Project`, is dedicated to housing a computing project focused on Python-based software development. It's intended to serve as both an educational resource and a platform for collaborative development in the field of computing.
+This repository, `Y2Computing-Project`, is dedicated to housing one of the two Y2 Imperial College Physics computing projects focused on Python-based Object-Oriented development. 
 
 ## Repository Contents
 
