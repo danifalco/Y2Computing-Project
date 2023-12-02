@@ -1,25 +1,18 @@
-'''
+""
 :Date: 17-11-2022
 :Author: Daniel Weronski Falco, Blackett Laboratory
-
-First module
-
-Classes:
-
-
-Functions:
-
-'''
+"""
 
 import numpy as np
+import matplotlib.pyplot as plt
+import copy
 import warnings
 
 z_hat = np.array([0, 0, 1])
 
+
 class Ray:
-    """
-    Ray class to represent a ray of light
-    """
+
     def __init__(self, pos: np.ndarray, direc: np.ndarray) -> None:
         """
         Ray class constructor
@@ -100,80 +93,10 @@ class Ray:
 
 class OpticalElement:
     def __init__(self):
-        pass
+        self._n1 = self._n2 = 1
 
-    # def intercept(self, ray: Ray, z0: float):
-    #     """
-    #     Works out the nearest point of interception between the ray's origin and the Optical Element's surface. Returns
-    #     array if this exists, None otherwise.
-    #
-    #     :param Ray ray: Ray object to calculate the intersection of
-    #     :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
-    #     """
-    #
-    #     def discriminant() -> float:
-    #         """
-    #         :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
-    #         p and the point of intersection
-    #         """
-    #         return np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
-    #
-    #     p = ray.p()
-    #     k = ray.k()
-    #     k_hat = normalise(k)
-    #     # r = r_vec
-    #     r = np.array([0, 0, z0]) - p
-    #     r_dot_k = np.dot(r, k_hat)
-    #
-    #     var_discriminant = discriminant()
-    #
-    #     return p, r_dot_k, k_hat, var_discriminant
-    #
-    #     # if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
-    #     #     return None
-    #     #
-    #     # elif abs(var_discriminant) < 1e-7:
-    #     #     # If there is only one intersection point i.e. quadratic nature is 0,Takes care of floating point operation
-    #     #     # error
-    #     #
-    #     #     return p + r_dot_k * k_hat  # in this case length = r_dot_k
-    #     #
-    #     # else:  # There are 2 intersection points, discriminant is positive, so we can safely sqrt. We select the
-    #     #     # smallest of the absolute value of the 2 lengths
-    #     #     length_lst = [abs(- r_dot_k + np.sqrt(var_discriminant)), abs(- r_dot_k - np.sqrt(var_discriminant))]
-    #     #     length = min(length_lst)
-    #     #     return p + length * k_hat
-
-    def propagate_ray(self, ray):
-        """propagate a ray through the optical element"""
-
-
-class SphericalRefraction(OpticalElement):
-
-    def __init__(self, z0: float, curv: float, n1: float, n2: float, a_radius: float) -> None:
-        """
-        Constructor for SphericalRefraction Class
-
-        :param float z0: The intercept of the surface with the z-axis
-        :param float curv: The curvature of the surface (1 / radius)
-        :param float n1: Refractive index of non-spherical space
-        :param float n2: Refractive index of sphere
-        :param float a_radius: The maximum extent of the surface from the optical axis
-        :return: None
-        """
-        # OpticalElement.__init__(self)
-        self._z0 = z0
-        self._curvature = curv
-        self._radius = 1 / curv
-        self._n1 = n1
-        self._n2 = n2
-        self.aperture_radius = a_radius  # TODO: impliment this
-
-    def __repr__(self):
-        pass
-
-    def __str__(self):
-        pass
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
+        raise NotImplementedError("Must implement normal method")
 
     def _intercept(self, ray: Ray) -> None | np.ndarray:
         """
@@ -184,98 +107,327 @@ class SphericalRefraction(OpticalElement):
         :return: np.ndarray object of the point of intersection in 3D space, None if this does not exist
         """
 
-        # def discriminant() -> float:
-        #     """
-        #     :return: Value of b^2 - 4ac (a=1), in the context of the quadratic equation to find out the length between
-        #     p and the point of intersection
-        #     """
-        #     return
-
-        discriminant = lambda : np.dot(r, k_hat) ** 2 - (vector_magnitude(r) ** 2 - self._radius ** 2)
+        def apt_check(intersection_pt):
+            if vector_magnitude(intersection_pt - np.array([0, 0, intersection_pt[2]])) <= self._aperture:
+                return intersection_pt
+            else:
+                return None
 
         p = ray.p()
         k = ray.k()
         k_hat = normalise(k)
 
         if self._curvature == 0:
-            # z_hat = np.array([0, 0, 1])
-            _r = p - np.array([0, 0, self._z0])  # Not to confuse this with the variable r outside this if statement
-            length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
-            return p + length * k_hat
+            r = p - np.array([0, 0, self._z0])
+            length = (- np.dot(r, z_hat)) / np.dot(k_hat, z_hat)
+            return apt_check(p + length * k_hat)  # Checks that intersection is within aperture
 
-        r = p - np.array([0, 0, self._z0 + self._radius])  # This is vector r as marked in the diagram before Task 4
+        radius = 1 / self._curvature
+        centre_lens = self._z0 + radius
+        r = p - np.array([0, 0, centre_lens])  # This is vector r as marked in the diagram before Task 4
         r_dot_k = np.dot(r, k_hat)
-        var_discriminant = discriminant()
 
-        if var_discriminant < -1e-7:  # There is no intersection, takes care of floating point operation error
-            return None
+        var_discriminant = r_dot_k ** 2 - (vector_magnitude(r) ** 2 - radius ** 2)
 
-        elif abs(var_discriminant) < 1e-7:
-            # If there is only one intersection point i.e. quadratic nature is 0,Takes care of floating point operation
+        if abs(var_discriminant) < 1e-7:
+            # If there is only one intersection point i.e. quadratic nature is 0, Takes care of floating point operation
             # error
-            return p + r_dot_k * k_hat  # in this case length = r_dot_k
+            return apt_check(p + r_dot_k * k_hat)  # in this case length = r_dot_k
 
-        else:  # There are 2 intersection points, discriminant is positive, so we can safely sqrt. We select the
-            # smallest of the absolute value of the 2 lengths
-            length_lst = [abs(- r_dot_k + np.sqrt(var_discriminant)), abs(- r_dot_k - np.sqrt(var_discriminant))]
-            length = min(length_lst)
-            return p + length * k_hat
+        elif abs(var_discriminant) > 1e-7:  # There are 2 intersection points, discriminant is positive, so we can
+            # safely sqrt. We select the smallest of the absolute value of the 2 lengths
 
-    def propagate_ray(self, ray: Ray) -> None:
+            length_lst = [- r_dot_k + np.sqrt(var_discriminant), - r_dot_k - np.sqrt(var_discriminant)]
+
+            if self._curvature > 0:
+                length = min(length_lst)
+            else:
+                if abs(self._z0 - p[2]) < abs(radius):
+                    length = length_lst[0]
+                else:
+                    length = max(length_lst)
+            return apt_check(p + length * k_hat)
+
+        #  Otherwise there is no intersection, so returns None
+
+    def propagate_ray(self, ray: Ray) -> tuple:
         """
-        Propagates ray after having intersected with the spherical refractive object in question (this object).
+        Generalised propagate ray function to be properly implmented in sub-classes
 
-        To do this, it calculates the intersection point (if it exists), appends said point and the direction of the ray
-        using the global snell_refraction function.
+        Raises an error if no intersection is found, or total internal reflection occurs, especially useful when
+        debugging. This error does not break any functionality.
 
-        Terminates the ray if there is no intersection or total internal reflection occurs. See Ray.is_terminated docs
-        for further info on ray termination.
-
-        :param Ray ray: Ray object to propagate
-        :return: None
+        :param Ray ray: ray to propagate
+        :return: Tuple containing p and k vectors to append
         """
 
         new_p = self._intercept(ray)
         if new_p is None:  # Warns about the ray not intersecting, continues
-            ray.append(None, None)
             warnings.warn(f"\nNo intersection found for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
+            return None, None  # Return statement to exit
 
-        normal_vec = normalise(new_p - (np.array([0, 0, self._z0 + self._radius])))
+        normal_vec = self.normal(new_p)
         new_k = snell_refraction(normalise(ray.k()), normalise(normal_vec), self._n1, self._n2)
         if new_k is None:
-            ray.append(new_p, None)
             warnings.warn(f"\nTotal Internal Reflection for ray with p={ray.p()}, k={ray.k()}\nRay terminated")
-            return None  # Return statement to exit
-        
-        ray.append(new_p, new_k)
+            return new_p, None  # Return statement to exit
+
+        return new_p, new_k
+
+
+class SphericalRefraction(OpticalElement):
+
+    def __init__(self, z0: float, curv: float, n1: float, n2: float, aperture: float):
+        """
+        Constructor for SphericalRefraction Class
+
+        :param float z0: The intercept of the surface with the z-axis
+        :param float curv: The curvature of the surface (1 / radius)
+        :param float n1: Refractive index of non-spherical space
+        :param float n2: Refractive index of sphere
+        :param float aperture: The maximum extent of the surface from the optical axis
+        :return: None
+        """
+        super().__init__()
+        self._z0 = z0
+        self._curvature = curv
+        self._n1 = n1
+        self._n2 = n2
+        self._aperture = aperture
+
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
+        """
+        Works out the normal of the surface at a given point (p_vector)
+
+        :param np.ndarray p_vector: The point to work out the normal to the surface at
+        :return: np.ndarray representing the normal
+        """
+        if self._curvature == 0:
+            return np.array([0, 0, 1])
+        return normalise(p_vector - (np.array([0, 0, self._z0 + 1 / self._curvature])))
+
+    def propagate_ray(self, ray: Ray) -> None:
+        """
+        Inherits parent class' propagate_ray method propagating the ray after having intersected with the spherical
+        refractive object in question (this object).
+
+        Calculates the intersection point (if exists), appends this point to the ray, and using global snell_refraction
+        function works out the direction of the ray and appends this too.
+
+        Terminates ray if there is no intersection point or if TIR occurs. See Ray.is_terminated() docs for further info
+        on ray termination.
+
+        :param Ray ray: Ray object to propagate
+        :return: None
+        """
+        if ray.is_terminated():
+            warnings.warn(f"\nRay {ray} is terminated, cannot propagate")
+            return None
+        pos, direct = super().propagate_ray(ray)
+        ray.append(pos, direct)
 
 
 class OutputPlane(OpticalElement):
 
-    def __init__(self, z0: float) -> None:
+    def __init__(self, z0: float, aperture: float) -> None:
         super().__init__()
         self._z0 = z0
+        self._aperture = aperture
+        self._curvature = 0
 
-    def intercept(self, ray: Ray) -> None | np.ndarray:
+    def normal(self, p_vector: np.ndarray) -> np.ndarray:
+        """
+        Works out the normal of the surface at a given point (p_vector)
 
-        if ray.is_terminated():
-            return None
-
-        init_p = ray.p()
-        init_k = ray.k()
-        k_hat = normalise(init_k)
-
-        # z_hat = np.array([0, 0, 1])
-        _r = init_p - np.array([0, 0, self._z0])
-        length = (- np.dot(_r, z_hat)) / np.dot(k_hat, z_hat)
-        return init_p + length * k_hat
+        :param np.ndarray p_vector: The point to work out the normal to the surface at
+        :return: np.ndarray representing the normal
+        """
+        return np.array([0, 0, -1])
 
     def propagate_ray(self, ray: Ray) -> None:
-        if ray.is_terminated():
-            return None
+        """
+        Inherits parent class' propagate_ray method propagating the ray after having intersected with the output plane
+        in question (this object).
 
-        ray.append(self.intercept(ray), None)  # Marks ray as terminated
+        Calculates the intersection point (if exists), appends this point to the ray, and terminates the ray by
+        appending None to the ray's direction vector. See Ray.is_terminated() docs for further info on ray termination.
+
+        Its calling will have no effect if the ray is already terminated.
+
+        :param Ray ray: Ray object to propagate
+        :return: None
+        """
+        if ray.is_terminated():
+            warnings.warn(f"\nRay {ray} is terminated, cannot propagate")
+            return None
+        pos, _ = super().propagate_ray(ray)
+        ray.append(pos, None)  # Marks ray as terminated
+
+
+class Lens:
+    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens, aperture: float, n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If both sides of the lens have 0 curvature
+        """
+        if curv_in == curv_out == 0:
+            raise ValueError("Both sides of the lens cannot be of 0 curvature")
+
+        self._z0_in = z0
+        self._curv_in = curv_in
+        self._n_lens = n_lens
+        self._n_air = n_out
+        self._aperture = aperture
+        self._curv_out = curv_out
+        self._z0_out = None  # This is defined in the method z0_out_generator
+
+        self.z0_out_generator()
+
+        self.surface_in = SphericalRefraction(self._z0_in, self._curv_in, self._n_air, self._n_lens, self._aperture)
+
+        self.surface_out = SphericalRefraction(self._z0_out, self._curv_out, self._n_air, self._n_lens, self._aperture)
+
+    def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane
+
+        :return: None
+        :raise NotImplementedError: if not implemented by sub-class
+        """
+        raise NotImplementedError
+
+    def surface_thickness(self, curvature: float) -> float:
+        """
+        Useful tool to work out the thickness of a refractive surface given its curvature and the lens' aperture
+        (radius)
+
+        :param float curvature: Curvature of the refractive surface to work out the thickness of
+        :return: float - Thickness of refractive surface
+        """
+        return (1 / abs(curvature)) - \
+               (1 / abs(curvature)) * np.sin(np.arccos(self._aperture * abs(curvature)))
+
+    def _propagate(self, ray: Ray) -> None:
+        """
+        Propagates ray through the lens in question
+
+        :param Ray ray: Ray to propagate
+        :return: None
+        """
+        self.surface_in.propagate_ray(ray)
+        self.surface_out.propagate_ray(ray)
+
+    def plot_xz(self, ray_lst: list, outpt_pln: OutputPlane | None = None) -> None:
+        """
+        Plots graph in the xz plane (ray traces).
+
+        Must use plt.show() statement after the use of this method, this is useful to further customise the plot (adding
+        title etc.)
+
+        :param list ray_lst: List containing ray objects to plot
+        :param outpt_pln: Optional, Output plane if desired
+        :return: None
+        """
+        for ray in ray_lst:
+            self._propagate(ray)
+            if outpt_pln is not None:
+                outpt_pln.propagate_ray(ray)
+            points = ray.vertices()
+            plt.plot([i[2] for i in points],
+                     [i[0] for i in points], '-x', color='#1f77b4', linewidth=0.8) if None not in points else None
+        plt.xlabel("Z-Axis (mm)")
+        plt.ylabel("X-Axis (mm)")
+
+    def plot_xy(self, ray_lst: list, outpt_pln: OutputPlane) -> None:
+        """
+        Plots scatter graph in the z plane (dots)
+
+        Must use plt.show() statement after the use of this method, this is useful to further customise the plot (adding
+        title etc.)
+
+        :param ray_lst: List containing ray objects to plot
+        :param outpt_pln: Output plane to plot the graph on. Unlike in plot_xz, this is mandatory here
+        :return: None
+        """
+        plt.figure(figsize=(6, 6))
+        for ray in ray_lst:
+            self._propagate(ray)
+            outpt_pln.propagate_ray(ray)
+            points = ray.p()
+            plt.scatter(points[0], points[1], s=7, color='#1f77b4')
+        plt.xlabel("X-Axis (mm)")
+        plt.ylabel("Y-Axis (mm)")
+
+
+class PlanoConvex(Lens):
+    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens: float, aperture: float, n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If input parameters for curvature do not make a plano-convex lens
+        """
+        if curv_in == 0 > curv_out or curv_in > 0 == curv_out:
+            Lens.__init__(self, z0, curv_in, curv_out, n_lens, aperture, n_out)
+        else:
+            raise ValueError("The input parameters for curvature do not make a Plano-Convex Lens")
+
+    def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane for a plano-convex configuration.
+
+        :return: None
+        """
+        if self._curv_in == 0:
+            self._z0_out = self._z0_in + self.surface_thickness(self._curv_out)
+
+        else:
+            self._z0_out = self._z0_in + self.surface_thickness(self._curv_in)
+
+
+class BiConvex(Lens):
+    def __init__(self, z0: float, curv_in: float, curv_out: float, n_lens: float, aperture: float, n_out: float = 1):
+        """
+        Class constructor.
+
+        Works out the point of intersection of the right-most refractive plane automatically.
+
+        :param z0: Intersection of the initial refractive plane with the z-axis
+        :param curv_in: Curvature of initial refractive plane
+        :param curv_out: Curvature of final refractive plane
+        :param n_lens: Refractive index of lens
+        :param aperture: Aperture, or size of the lens (radius)
+        :param n_out: Refractive index outside the lens (air or vacuum generally)
+        :raise ValueError: If input parameters for curvature do not make a biconvex lens
+        """
+        if curv_in > 0 > curv_out:
+            Lens.__init__(self, z0, curv_in, curv_out, n_lens, aperture, n_out)
+        else:
+            raise ValueError("The input parameters for curvature do not make a Biconvex Lens")
+
+    def z0_out_generator(self):
+        """
+        Works out z-axis intersection of the final refractive plane for a biconvex configuration.
+
+        :return: None
+        """
+        self._z0_out = self._z0_in + 2 * self.surface_thickness(self._curv_in)
 
 
 def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: float):
@@ -298,7 +450,6 @@ def snell_refraction(inc_v: np.ndarray, surf_n: np.ndarray, n_1: float, n_2: flo
     if np.sin(theta1) > (n_2 / n_1):  # Checks for TIR
         return None
 
-    # theta2 = np.arcsin(n_1 * np.sin(theta1) / n_2)
     theta2 = np.arcsin(n_1 / n_2 * vector_magnitude(np.cross(inc_v_nor, surf_n_nor)))
     ref_v = (n_1 / n_2) * inc_v_nor + ((n_1 / n_2) * np.cos(theta1) - np.cos(theta2)) * surf_n_nor
     return normalise(ref_v)
@@ -322,3 +473,79 @@ def normalise(dir_vect: np.ndarray) -> np.ndarray:
     :return: Normalised direction vector
     """
     return dir_vect / vector_magnitude(dir_vect)
+
+
+def col_generator(z0: float = 0, rad: float = 5, dist_pts: float = 0.5, k_vec: None | np.ndarray = None) -> list:
+    """
+    Generates a collimated bundle of equally spaced rays travelling in the z-direction by default using polar
+    coordinates.
+
+    Although it is theoretically impossible to make an equally spaced bundle of rays, by increasing the number of rays
+    by 6 ever new ring we can get the closest approximation
+
+    Calling the function without parsing any parameters will output a default ray bundle of radius 5
+
+    :param float z0: the z point to start the bundle of rays at
+    :param float rad: the radius of the ray bundle
+    :param float dist_pts: distance between points
+    :param None | np.ndarray k_vec: direction vector of the rays (defaults to z_hat)
+    :return: list - containing all individual ray objects
+    """
+    if k_vec is None:  # Properly dealing with mutable objects passed as kwargs
+        k = np.array([0, 0, 1])
+    else:
+        k = k_vec
+    ray_lst = [Ray(np.array([0, 0, z0]), k)]
+
+    pts_incr = 6  # 6 is the best approximation to "uniformly distributed". This is impossible in reality
+    num_of_shells = int(rad / dist_pts)
+    for i in range(1, num_of_shells):
+        num_pts = i * pts_incr  # The number of rays in the "shell"
+        radius = i * dist_pts
+        ray_lst += (Ray(pos=np.array([radius * np.cos(2 * np.pi * dot / num_pts),
+                                      radius * np.sin(2 * np.pi * dot / num_pts),
+                                      z0]),
+                        direc=k)
+                    for dot in range(num_pts))
+
+    return ray_lst
+
+
+def rms(ray_lst: list[Ray]) -> float:
+    """
+    Works out the RMS radius of a list of ray objects
+
+    :param list[Ray] ray_lst: List of rays to calculate the RMS radius of
+    :return: float - RMS radius of given rays
+    """
+    squares_list = []
+    for ray in ray_lst:
+        if None not in ray.p():
+            squares_list.append(ray.p()[0] ** 2 + ray.p()[1] ** 2)
+
+    return np.sqrt(np.mean(squares_list))
+
+
+def rms_plotter(ray_lst: list[Ray], arange: np.ndarray) -> tuple:
+    """
+    Helper function to easily debug and further expand program. Plots rms values of rays over a range of previously
+    given values.
+
+    Helps find the point of minimum RMS (focal point)
+
+    :param ray_lst: List of rays to calculate the RMS radius of
+    :param np.ndarray arange: range of z-values to iterate over
+    :return: Tuple containing z-values and their corresponding RMS values
+    """
+    lst_of_rays = copy.deepcopy(ray_lst)
+    z_vals = []
+    rms_vals = []
+    for z_val in arange:
+        ray_set = copy.deepcopy(lst_of_rays)
+        out_pln = OutputPlane(z_val, 50)
+        for ray in ray_set:
+            out_pln.propagate_ray(ray)
+        rms_vals.append(rms(ray_set))
+        z_vals.append(z_val)
+
+    return z_vals, rms_vals
